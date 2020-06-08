@@ -11,6 +11,9 @@
 namespace at {
 namespace native {
 
+template<typename scalar_t>
+bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *b, int64_t ldb, scalar_t beta, scalar_t *c, int64_t ldc);
+
 namespace {
 
 // hyper-volume to column, CPU
@@ -271,7 +274,7 @@ void slow_conv_dilated_all_cpu_template(
             C = alpha * op(A) * op(B) + beta * C
             op(A) = 'n', op(B) = 'n', alpha=1, beta=1
         */
-        THBlas_gemm<scalar_t>(
+        native::gemm<scalar_t>(
             /*transa=*/'n',
             /*transb=*/'n',
             /*     m=*/columns.size(1),
@@ -315,7 +318,7 @@ void slow_conv_dilated_all_cpu_template(
             C = alpha * op(A) * op(B) + beta * C
             op(A) = 'n', op(B) = 't', alpha=1, beta=0
          */
-        THBlas_gemm<scalar_t>(
+        native::gemm<scalar_t>(
             /*transa=*/'n',
             /*transb=*/'t',
             /*     m=*/columns.size(1),
@@ -380,7 +383,7 @@ void slow_conv_dilated_all_cpu_template(
           grad_weight^T C = alpha * op(A) * op(B) + beta * C op(A) = 't',
           op(B) = 'n', alpha=scale, beta=1
         */
-        THBlas_gemm<scalar_t>(
+        native::gemm<scalar_t>(
             /*transa=*/'t',
             /*transb=*/'n',
             /*     m=*/columns.size(0),

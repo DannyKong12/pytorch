@@ -2069,7 +2069,7 @@
   use_c10_dispatcher: full
   variants: function, method
   dispatch:
-    CPU: mm_cpu
+    CPU: mm
     CUDA: mm_cuda
     SparseCPU: _sparse_mm
     SparseCUDA: _sparse_mm
@@ -2077,7 +2077,7 @@
 
 - func: mm.out(Tensor self, Tensor mat2, *, Tensor(a!) out) -> Tensor(a!)
   dispatch:
-    CPU: mm_cpu_out
+    CPU: mm_out
     CUDA: mm_out_cuda
     SparseCPU: _sparse_mm_out
     SparseCUDA: _sparse_mm_out
@@ -3464,8 +3464,6 @@
 
 - func: addmm.out(Tensor self, Tensor mat1, Tensor mat2, *, Scalar beta=1, Scalar alpha=1, Tensor(a!) out) -> Tensor(a!)
   dispatch:
-    CPU: addmm_cpu_out
-    CUDA: addmm_cuda_out
     SparseCPU: addmm_out_sparse_dense_cpu
     SparseCUDA: addmm_out_sparse_dense_cuda
   supports_named_tensor: True
@@ -3473,24 +3471,15 @@
 - func: addmm(Tensor self, Tensor mat1, Tensor mat2, *, Scalar beta=1, Scalar alpha=1) -> Tensor
   use_c10_dispatcher: full
   variants: function, method
-  dispatch:
-    CPU: addmm_cpu
-    CUDA: addmm_cuda
-    SparseCPU: addmm_sparse_dense_cpu
-    SparseCUDA: addmm_sparse_dense_cuda
-    Vulkan: vulkan_addmm
   supports_named_tensor: True
 
 - func: addmm_(Tensor(a!) self, Tensor mat1, Tensor mat2, *, Scalar beta=1, Scalar alpha=1) -> Tensor(a!)
   variants: method
-  dispatch:
-    CPU: legacy::cpu::_th_addmm_
-    CUDA: legacy::cuda::_th_addmm_
-    # Warning!  For whatever reason, the inplace sparse addmm is NON
-    # broadcasting
-    SparseCPU: s_addmm_sparse_dense_cpu_
-    SparseCUDA: s_addmm_sparse_dense_cuda_
   supports_named_tensor: True
+
+- func: _addmm_impl_(Tensor(a!) self, Tensor self2, Tensor mat, Tensor vec, *, Scalar beta=1, Scalar alpha=1) -> Tensor(a!)
+  dispatch:
+    CPU: addmm_impl_cpu
 
 # NOTE [ Sparse: autograd and API ]
 #

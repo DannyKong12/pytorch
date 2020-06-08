@@ -11,6 +11,8 @@ namespace native {
 
 template<typename scalar_t>
 bool gemv(char trans, int64_t m, int64_t n, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *x, int64_t incx, scalar_t beta, scalar_t *y, int64_t incy);
+template<typename scalar_t>
+bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *b, int64_t ldb, scalar_t beta, scalar_t *c, int64_t ldc);
 
 namespace {
 
@@ -317,7 +319,7 @@ void slow_conv_transpose3d_out_cpu_template(
 
           // Do GEMM (note: this is a bit confusing because gemm assumes
           // column-major matrices)
-          THBlas_gemm<scalar_t>(
+          native::gemm<scalar_t>(
               'n',
               't',
               n,
@@ -366,7 +368,7 @@ void slow_conv_transpose3d_out_cpu_template(
           // Do GEMM (note: this is a bit confusing because gemm assumes
           // column-major matrices)
           if (bias.defined()) {
-            THBlas_gemm<scalar_t>(
+            native::gemm<scalar_t>(
                 't',
                 'n',
                 n_,
@@ -565,7 +567,7 @@ void slow_conv_transpose3d_backward_out_cpu_template(
 
           // Do GEMM (note: this is a bit confusing because gemm assumes
           // column-major matrices)
-          THBlas_gemm<scalar_t>(
+          native::gemm<scalar_t>(
               'n',
               'n',
               n,
@@ -790,7 +792,7 @@ void slow_conv_transpose3d_acc_grad_parameters_cpu(
 
             // Do GEMM (note: this is a bit confusing because gemm assumes
             // column-major matrices)
-            THBlas_gemm<scalar_t>(
+            native::gemm<scalar_t>(
                 't',
                 'n',
                 n,

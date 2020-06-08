@@ -344,7 +344,6 @@ void THCTensor_(addmm)(THCState *state, THCTensor *r_, THCTensor *t, THCTensor *
     at::NoNamesGuard guard;
     THCTensor_(addmmImpl)(state, r_, t, m1, m2, beta, alpha);
   }
-  at::namedinference::propagate_names_for_addmm(r_, m1, m2, t);
 }
 
 void THCTensor_(addbmm)(THCState *state, THCTensor *result, THCTensor *t,

@@ -8,6 +8,9 @@ extern "C" void dscal_(int *n, double *a, double *x, int *incx);
 extern "C" void sscal_(int *n, float *a, float *x, int *incx);
 extern "C" void dgemv_(char *trans, int *m, int *n, double *alpha, double *a, int *lda, double *x, int *incx, double *beta, double *y, int *incy);
 extern "C" void sgemv_(char *trans, int *m, int *n, float *alpha, float *a, int *lda, float *x, int *incx, float *beta, float *y, int *incy);
+extern "C" void dgemm_(char *transa, char *transb, int *m, int *n, int *k, double *alpha, double *a, int *lda, double *b, int *ldb, double *beta, double *c, int *ldc);
+extern "C" void sgemm_(char *transa, char *transb, int *m, int *n, int *k, float *alpha, float *a, int *lda, float *b, int *ldb, float *beta, float *c, int *ldc);
+
 #endif // AT_BUILD_WITH_BLAS
 
 namespace at { namespace native {
@@ -25,6 +28,11 @@ bool gemv_use_fast_path(int64_t m, int64_t n, int64_t lda, int64_t incx, int64_t
 }
 
 template <typename scalar_t>
+bool gemm_use_fast_path(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc){
+  return false;
+}
+
+template <typename scalar_t>
 void scal_fast_path(int *n, scalar_t *a, scalar_t *x, int *incx) {
   TORCH_INTERNAL_ASSERT(false, "scal_fast_path shouldn't be called for this configuration");
 }
@@ -34,10 +42,16 @@ void gemv_fast_path(char *trans, int *m, int *n, scalar_t *alpha, scalar_t *a, i
   TORCH_INTERNAL_ASSERT(false, "gemv_fast_path shouldn't be called for this configuration");
 }
 
+template <typename scalar_t>
+void gemm_fast_path(char *transa, char *transb, int *m, int *n, int *k, scalar_t *alpha, scalar_t *a, int *lda, scalar_t *b, int *ldb, scalar_t *beta, scalar_t *c, int *ldc) {
+  TORCH_INTERNAL_ASSERT(false, "gemm_fast_path shouldn't be called for this configuration");
+}
+
 #define INSTANTIATE(scalar_t)                                                                                                                                                     \
 template bool scal_use_fast_path<scalar_t>(int64_t n, int64_t incx);                                                                                                              \
 template bool gemv_use_fast_path<scalar_t>(int64_t m, int64_t n, int64_t lda, int64_t incx, int64_t incy);                                                                        \
 template void gemv_fast_path<scalar_t>(char *trans, int *m, int *n, scalar_t *alpha, scalar_t *a, int *lda, scalar_t *x, int *incx, scalar_t *beta, scalar_t *y, int *incy);      \
+template void gemm_fast_path<scalar_t>(char *trans, char *transb, int *m, int *n, int *k,  scalar_t *alpha, scalar_t *a, int *lda, scalar_t *b, int *ldb, scalar_t *beta, scalar_t *c, int *ldc);      \
 template void scal_fast_path<scalar_t>(int *n, scalar_t *a, scalar_t *x, int *incx);
 
 #if AT_BUILD_WITH_BLAS()
@@ -82,6 +96,16 @@ void gemv_fast_path<double>(char *trans, int *m, int *n, double *alpha, double *
 template <>
 void gemv_fast_path<float>(char *trans, int *m, int *n, float *alpha, float *a, int *lda, float *x, int *incx, float *beta, float *y, int *incy) {
   sgemv_(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+template <>
+void gemm_fast_path<double>(char *transa, char *transb, int *m, int *n, int *k, double *alpha, double *a, int *lda, double *b, int *ldb, double *beta, double *c, int *ldc) {
+  dgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <>
+void gemm_fast_path<float>(char *transa, char *transb, int *m, int *n, int *k, float *alpha, float *a, int *lda, float *b, int *ldb, float *beta, float *c, int *ldc) {
+  sgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 #else
 INSTANTIATE(float);
@@ -160,8 +184,29 @@ bool gemv(char trans, int64_t m, int64_t n, scalar_t alpha, scalar_t *a, int64_t
   return false;
 }
 
+template<typename scalar_t>
+bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *b, int64_t ldb, scalar_t beta, scalar_t *c, int64_t ldc) {
+  // TODO: CHECK STUFF
+  //
+
+  if (blas_impl::gemm_use_fast_path<scalar_t>(m, n, k, lda, ldb, ldc)) {
+    int i_m = (int)m;
+    int i_n = (int)n;
+    int i_k = (int)k;
+    int i_lda = (int)lda;
+    int i_ldb = (int)ldb;
+    int i_ldc = (int)ldc;
+    blas_impl::gemm_fast_path<scalar_t>(&transa, &transb, &i_m, &i_n, &i_k, &alpha, a, &i_lda, b, &i_ldb, &beta, c, &i_ldc);
+    return true;
+  }
+  
+  return false;
+}
+
+
 #define INSTANTIATE(scalar_t, _) \
-template bool gemv<scalar_t>(char trans, int64_t m, int64_t n, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *x, int64_t incx, scalar_t beta, scalar_t *y, int64_t incy);
+template bool gemv<scalar_t>(char trans, int64_t m, int64_t n, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *x, int64_t incx, scalar_t beta, scalar_t *y, int64_t incy); \
+template bool gemm<scalar_t>(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *b, int64_t ldb, scalar_t beta, scalar_t *c, int64_t ldc);
 AT_FORALL_SCALAR_TYPES_AND(BFloat16, INSTANTIATE);
 AT_FORALL_COMPLEX_TYPES(INSTANTIATE);
 #undef INSTANTIATE

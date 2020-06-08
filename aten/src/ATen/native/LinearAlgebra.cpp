@@ -13,6 +13,7 @@
 #include <limits>
 #include <ATen/NamedTensorUtils.h>
 
+
 namespace at {
 namespace native {
 
@@ -183,18 +184,6 @@ Tensor& addbmm_cpu_out(Tensor& result, const Tensor& self, const Tensor& batch1,
   return legacy::cpu::_th_addbmm_out(result, b_self, batch1, batch2, beta, alpha);
 }
 
-Tensor addmm_cpu(const Tensor& self, const Tensor& mat1, const Tensor& mat2, Scalar beta, Scalar alpha) {
-  Tensor b_self;
-  std::tie(b_self) = expand_size(self, {mat1.size(0), mat2.size(1)}, "addmm");
-  return legacy::cpu::_th_addmm(b_self, mat1, mat2, beta, alpha);
-}
-
-Tensor& addmm_cpu_out(Tensor &result, const Tensor& self, const Tensor& mat1, const Tensor& mat2, Scalar beta, Scalar alpha) {
-  Tensor b_self;
-  std::tie(b_self) = expand_size(self, {mat1.size(0), mat2.size(1)}, "addmm_out");
-  return legacy::cpu::_th_addmm_out(result, b_self, mat1, mat2, beta, alpha);
-}
-
 template <typename scalar_t, bool is_bmm>
 inline void baddbmm_cpu_kernel(const Tensor& result, const Tensor& self, const Tensor& mat2, Scalar beta_, Scalar alpha_) {
   int64_t bs = result.size(0);
@@ -307,7 +296,7 @@ static inline Tensor& bmm_out_or_baddbmm_(Tensor& self_or_result, const Tensor& 
     if (is_bmm_out) {
       for (int64_t b = 0; b < bs; b++) {
         auto r = self_or_result.select(0, b);
-        native::mm_cpu_out(r, batch1.select(0, b), batch2.select(0, b));
+        native::mm_out(r, batch1.select(0, b), batch2.select(0, b));
       }
     } else {
       for (int64_t b = 0; b < bs; b++) {

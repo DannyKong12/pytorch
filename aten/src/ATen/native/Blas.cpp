@@ -7,6 +7,10 @@ namespace at { namespace native {
 template<typename scalar_t>
 bool gemv(char trans, int64_t m, int64_t n, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *x, int64_t incx, scalar_t beta, scalar_t *y, int64_t incy);
 
+template<typename scalar_t>
+bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t alpha, scalar_t *a, int64_t lda, scalar_t *b, int64_t ldb, scalar_t beta, scalar_t *c, int64_t ldc);
+
+
 constexpr inline bool lda_cond(int64_t m, int64_t n, int64_t lda) {
   return n == 1 || lda > std::max<int64_t>(1L, m);
 }
@@ -31,7 +35,7 @@ Tensor &addmv_impl_cpu(Tensor& result, const Tensor &self, const Tensor &mat, co
           vec.data_ptr<scalar_t>(), vec.stride(0), beta, result.data_ptr<scalar_t>(), r_stride);
     }
 
-    // In THE FAST PATH of gemv (x,0).mv(0) does not handle beta, whereas gemm does for case where (x,0).mm(0,y).
+    // In THE FAST PATH of gemv (x,0).mv(0) does not handle beta, whereas gemv does for case where (x,0).mv(0,y).
     // But in the naive fall back implementation, this is not the case.
     if (is_fast && vec.size(0) == 0 && mat.size(0) != 0) {
       if (beta == scalar_t(0)) {
@@ -89,6 +93,59 @@ Tensor &mv_out(Tensor& result, const Tensor &self, const Tensor &vec) {
 Tensor mv(const Tensor &self, const Tensor &vec) {
   Tensor result = at::empty({self.size(0)}, self.options());
   return native::mv_out(result, self, vec);
+}
+
+Tensor &addmm_impl_cpu(Tensor& result, const Tensor &a, const Tensor &b, const Tensor &c, Scalar beta_, Scalar alpha_) {
+  auto r_stride = result.stride(0);
+  AT_DISPATCH_ALL_TYPES_AND_COMPLEX_AND(kBFloat16, b.scalar_type(), "addmm_impl_cpu", [&] {
+    auto beta = beta_.to<scalar_t>();
+    auto alpha = alpha_.to<scalar_t>();
+    gemm<scalar_t>('n', 'n', a.size(0), b.size(1), a.size(1), alpha, a.data_ptr<scalar_t>(), a.stride(1), b.data_ptr<scalar_t>(), 
+        b.stride(1), beta, c.data_ptr<scalar_t>(), r_stride);
+  });
+  return result;
+}
+
+Tensor &addmm_out(Tensor& result, const Tensor &a, const Tensor &b, const Tensor &c, Scalar beta, Scalar alpha) {
+  { // scope of NoNamesGuard
+
+  at::NoNamesGuard guard;
+  result.resize_({a.size(0), b.size(1)});
+
+  TORCH_CHECK((a.dim() == 2 && b.dim() == 2),
+    "matrix + matrix @ matrix expected, got ", a.dim(), ", ", b.dim(), ", ", c.dim());
+  TORCH_CHECK((a.size(1) == b.size(0) && a.size(0) == c.size(0) && b.size(1) == c.size(1)),
+    "size mismatch, get ", a.size(0), ", ", a.size(1), "x", b.size(0), ",", b.size(1));
+
+  if (!result.is_same(a)) {
+    at::native::copy_(result, a);
+  }
+
+  if (result.numel() != 0) {
+    at::_addmm_impl_(result, a, b, c, beta, alpha);
+  }
+
+  } // scope of NoNamesGuard
+  at::namedinference::propagate_names_for_addmm(result, b, c, a);
+  return result;
+}
+
+Tensor addmm(const Tensor &a, const Tensor &b, const Tensor &c, Scalar beta, Scalar alpha) {
+  Tensor result = at::empty({a.size(0), b.size(1)}, a.options());
+  return native::addmm_out(result, a, b, c, beta, alpha);
+}
+
+Tensor &addmm_(Tensor &a, const Tensor &b, const Tensor &c, Scalar beta, Scalar alpha) {
+  return native::addmm_out(a, a, b, c, beta, alpha);
+}
+
+Tensor &mm_out(Tensor& result, const Tensor &a, const Tensor &b) {
+  return native::addmm_out(result, result, a, b, 0, 1);
+}
+
+Tensor mm(const Tensor &a, const Tensor &b) {
+  Tensor result = at::empty({a.size(0), b.size(1)}, a.options());
+  return native::mm_out(result, a, b);
 }
 
 }}  // namespace at::native
