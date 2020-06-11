@@ -96,7 +96,7 @@ Tensor mv(const Tensor &self, const Tensor &vec) {
 }
 
 Tensor &addmm_impl_cpu(Tensor& result, const Tensor &a, const Tensor &b, const Tensor &c, Scalar beta_, Scalar alpha_) {
-  auto r_stride = result.size(0);
+  auto r_stride = result.stride(0);
   AT_DISPATCH_ALL_TYPES_AND_COMPLEX_AND(kBFloat16, b.scalar_type(), "addmm_impl_cpu", [&] {
     auto beta = beta_.to<scalar_t>();
     auto alpha = alpha_.to<scalar_t>();

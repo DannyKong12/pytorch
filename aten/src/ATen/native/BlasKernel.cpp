@@ -15,6 +15,11 @@ extern "C" void zgemm_(char *transa, char *transb, int *m, int *n, int *k, c10::
 
 #endif // AT_BUILD_WITH_BLAS
 
+#if AT_MKL_ENABLED()
+#include <mkl.h>
+#endif
+
+
 namespace at { namespace native {
 
 namespace blas_impl {
@@ -45,7 +50,7 @@ void gemv_fast_path(char *trans, int *m, int *n, scalar_t *alpha, scalar_t *a, i
 }
 
 template <typename scalar_t>
-void gemm_fast_path(char *transa, char *transb, int *m, int *n, int *k, scalar_t *alpha, scalar_t *a, int *lda, scalar_t *b, int *ldb, scalar_t *beta, scalar_t *c, int *ldc) {
+void gemm_fast_path(char *transa, char *transb, int m, int n, int k, scalar_t alpha, scalar_t *a, int lda, scalar_t *b, int ldb, scalar_t beta, scalar_t *c, int ldc) {
   TORCH_INTERNAL_ASSERT(false, "gemm_fast_path shouldn't be called for this configuration");
 }
 
@@ -53,7 +58,7 @@ void gemm_fast_path(char *transa, char *transb, int *m, int *n, int *k, scalar_t
 template bool scal_use_fast_path<scalar_t>(int64_t n, int64_t incx);                                                                                                              \
 template bool gemv_use_fast_path<scalar_t>(int64_t m, int64_t n, int64_t lda, int64_t incx, int64_t incy);                                                                        \
 template void gemv_fast_path<scalar_t>(char *trans, int *m, int *n, scalar_t *alpha, scalar_t *a, int *lda, scalar_t *x, int *incx, scalar_t *beta, scalar_t *y, int *incy);      \
-template void gemm_fast_path<scalar_t>(char *trans, char *transb, int *m, int *n, int *k,  scalar_t *alpha, scalar_t *a, int *lda, scalar_t *b, int *ldb, scalar_t *beta, scalar_t *c, int *ldc);      \
+template void gemm_fast_path<scalar_t>(char *trans, char *transb, int m, int n, int k,  scalar_t alpha, scalar_t *a, int lda, scalar_t *b, int ldb, scalar_t beta, scalar_t *c, int ldc);      \
 template void scal_fast_path<scalar_t>(int *n, scalar_t *a, scalar_t *x, int *incx);
 
 #if AT_BUILD_WITH_BLAS()
@@ -122,23 +127,23 @@ void gemv_fast_path<float>(char *trans, int *m, int *n, float *alpha, float *a, 
 }
 
 template <>
-void gemm_fast_path<double>(char *transa, char *transb, int *m, int *n, int *k, double *alpha, double *a, int *lda, double *b, int *ldb, double *beta, double *c, int *ldc) {
-  dgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+void gemm_fast_path<double>(char *transa, char *transb, int m, int n, int k, double alpha, double *a, int lda, double *b, int ldb, double beta, double *c, int ldc) {
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 
 template <>
-void gemm_fast_path<float>(char *transa, char *transb, int *m, int *n, int *k, float *alpha, float *a, int *lda, float *b, int *ldb, float *beta, float *c, int *ldc) {
-  sgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+void gemm_fast_path<float>(char *transa, char *transb, int m, int n, int k, float alpha, float *a, int lda, float *b, int ldb, float beta, float *c, int ldc) {
+  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 
 template <>
-void gemm_fast_path<c10::complex<double>>(char *transa, char *transb, int *m, int *n, int *k, c10::complex<double> *alpha, c10::complex<double> *a, int *lda, c10::complex<double> *b, int *ldb, c10::complex<double> *beta, c10::complex<double> *c, int *ldc) {
-  zgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+void gemm_fast_path<c10::complex<double>>(char *transa, char *transb, int m, int n, int k, c10::complex<double> alpha, c10::complex<double> *a, int lda, c10::complex<double> *b, int ldb, c10::complex<double> beta, c10::complex<double> *c, int ldc) {
+  cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc);
 }
 
 template <>
-void gemm_fast_path<c10::complex<float>>(char *transa, char *transb, int *m, int *n, int *k, c10::complex<float> *alpha, c10::complex<float> *a, int *lda, c10::complex<float> *b, int *ldb, c10::complex<float> *beta, c10::complex<float> *c, int *ldc) {
-  cgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+void gemm_fast_path<c10::complex<float>>(char *transa, char *transb, int m, int n, int k, c10::complex<float> alpha, c10::complex<float> *a, int lda, c10::complex<float> *b, int ldb, c10::complex<float> beta, c10::complex<float> *c, int ldc) {
+  cblas_cgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc);
 }
 #else
 INSTANTIATE(float);
@@ -229,7 +234,7 @@ bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t al
     int i_lda = (int)lda;
     int i_ldb = (int)ldb;
     int i_ldc = (int)ldc;
-    blas_impl::gemm_fast_path<scalar_t>(&transa, &transb, &i_m, &i_n, &i_k, &alpha, a, &i_lda, b, &i_ldb, &beta, c, &i_ldc);
+    blas_impl::gemm_fast_path<scalar_t>(&transa, &transb, i_m, i_n, i_k, alpha, a, i_lda, b, i_ldb, beta, c, i_ldc);
     return true;
   }
 
