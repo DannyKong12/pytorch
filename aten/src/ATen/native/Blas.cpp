@@ -96,12 +96,12 @@ Tensor mv(const Tensor &self, const Tensor &vec) {
 }
 
 Tensor &addmm_impl_cpu(Tensor& result, const Tensor &a, const Tensor &b, const Tensor &c, Scalar beta_, Scalar alpha_) {
-  auto r_stride = result.stride(0);
+  auto r_stride = result.size(0);
   AT_DISPATCH_ALL_TYPES_AND_COMPLEX_AND(kBFloat16, b.scalar_type(), "addmm_impl_cpu", [&] {
     auto beta = beta_.to<scalar_t>();
     auto alpha = alpha_.to<scalar_t>();
-    gemm<scalar_t>('n', 'n', a.size(0), b.size(1), a.size(1), alpha, a.data_ptr<scalar_t>(), a.stride(1), b.data_ptr<scalar_t>(), 
-        b.stride(1), beta, c.data_ptr<scalar_t>(), r_stride);
+    gemm<scalar_t>('t', 't', a.size(0), b.size(1), a.size(1), alpha, a.data_ptr<scalar_t>(), a.size(1), b.data_ptr<scalar_t>(), 
+        b.size(1), beta, result.data_ptr<scalar_t>(), r_stride);
   });
   return result;
 }
@@ -117,7 +117,7 @@ Tensor &addmm_out(Tensor& result, const Tensor &a, const Tensor &b, const Tensor
   TORCH_CHECK((a.size(1) == b.size(0) && a.size(0) == c.size(0) && b.size(1) == c.size(1)),
     "size mismatch, get ", a.size(0), ", ", a.size(1), "x", b.size(0), ",", b.size(1));
 
-  if (!result.is_same(a)) {
+  if (!result.is_same(c)) {
     at::native::copy_(result, a);
   }
 
@@ -126,7 +126,7 @@ Tensor &addmm_out(Tensor& result, const Tensor &a, const Tensor &b, const Tensor
   }
 
   } // scope of NoNamesGuard
-  at::namedinference::propagate_names_for_addmm(result, b, c, a);
+  // at::namedinference::propagate_names_for_addmm(result, b, c, a);
   return result;
 }
 
@@ -140,7 +140,7 @@ Tensor &addmm_(Tensor &a, const Tensor &b, const Tensor &c, Scalar beta, Scalar 
 }
 
 Tensor &mm_out(Tensor& result, const Tensor &a, const Tensor &b) {
-  return native::addmm_out(result, result, a, b, 0, 1);
+  return native::addmm_out(result, a, b, result, 0, 1);
 }
 
 Tensor mm(const Tensor &a, const Tensor &b) {

@@ -10,6 +10,8 @@ extern "C" void dgemv_(char *trans, int *m, int *n, double *alpha, double *a, in
 extern "C" void sgemv_(char *trans, int *m, int *n, float *alpha, float *a, int *lda, float *x, int *incx, float *beta, float *y, int *incy);
 extern "C" void dgemm_(char *transa, char *transb, int *m, int *n, int *k, double *alpha, double *a, int *lda, double *b, int *ldb, double *beta, double *c, int *ldc);
 extern "C" void sgemm_(char *transa, char *transb, int *m, int *n, int *k, float *alpha, float *a, int *lda, float *b, int *ldb, float *beta, float *c, int *ldc);
+extern "C" void cgemm_(char *transa, char *transb, int *m, int *n, int *k, c10::complex<float> *alpha, c10::complex<float> *a, int *lda, c10::complex<float> *b, int *ldb, c10::complex<float> *beta, c10::complex<float> *c, int *ldc);
+extern "C" void zgemm_(char *transa, char *transb, int *m, int *n, int *k, c10::complex<double> *alpha, c10::complex<double> *a, int *lda, c10::complex<double> *b, int *ldb, c10::complex<double> *beta, c10::complex<double> *c, int *ldc);
 
 #endif // AT_BUILD_WITH_BLAS
 
@@ -28,7 +30,7 @@ bool gemv_use_fast_path(int64_t m, int64_t n, int64_t lda, int64_t incx, int64_t
 }
 
 template <typename scalar_t>
-bool gemm_use_fast_path(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc){
+bool gemm_use_fast_path(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc) {
   return false;
 }
 
@@ -89,6 +91,27 @@ bool gemv_use_fast_path<double>(int64_t m, int64_t n, int64_t lda, int64_t incx,
 }
 
 template <>
+bool gemm_use_fast_path<float>(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc) {
+  // TODO: Should Perform Checks
+  return true;
+}
+
+template <>
+bool gemm_use_fast_path<double>(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc) {
+  return gemm_use_fast_path<float>(m, n, k, lda, ldb, ldc);
+}
+
+template <>
+bool gemm_use_fast_path<c10::complex<float>>(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc) {
+  return gemm_use_fast_path<float>(m, n, k, lda, ldb, ldc);
+}
+
+template <>
+bool gemm_use_fast_path<c10::complex<double>>(int64_t m, int64_t n, int64_t k, int64_t lda, int64_t ldb, int64_t ldc) {
+  return gemm_use_fast_path<float>(m, n, k, lda, ldb, ldc);
+}
+
+template <>
 void gemv_fast_path<double>(char *trans, int *m, int *n, double *alpha, double *a, int *lda, double *x, int *incx, double *beta, double *y, int *incy) {
   dgemv_(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
 }
@@ -106,6 +129,16 @@ void gemm_fast_path<double>(char *transa, char *transb, int *m, int *n, int *k, 
 template <>
 void gemm_fast_path<float>(char *transa, char *transb, int *m, int *n, int *k, float *alpha, float *a, int *lda, float *b, int *ldb, float *beta, float *c, int *ldc) {
   sgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <>
+void gemm_fast_path<c10::complex<double>>(char *transa, char *transb, int *m, int *n, int *k, c10::complex<double> *alpha, c10::complex<double> *a, int *lda, c10::complex<double> *b, int *ldb, c10::complex<double> *beta, c10::complex<double> *c, int *ldc) {
+  zgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <>
+void gemm_fast_path<c10::complex<float>>(char *transa, char *transb, int *m, int *n, int *k, c10::complex<float> *alpha, c10::complex<float> *a, int *lda, c10::complex<float> *b, int *ldb, c10::complex<float> *beta, c10::complex<float> *c, int *ldc) {
+  cgemm_(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 #else
 INSTANTIATE(float);
@@ -199,7 +232,8 @@ bool gemm(char transa, char transb, int64_t m, int64_t n, int64_t k, scalar_t al
     blas_impl::gemm_fast_path<scalar_t>(&transa, &transb, &i_m, &i_n, &i_k, &alpha, a, &i_lda, b, &i_ldb, &beta, c, &i_ldc);
     return true;
   }
-  
+
+  TORCH_CHECK(false, "This type is currently not supported by mm");
   return false;
 }
 
